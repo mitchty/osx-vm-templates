@@ -75,8 +75,6 @@
         "../scripts/vagrant.sh",
         "../scripts/vmware.sh",
         "../scripts/xcode-cli-tools.sh",
-        "../scripts/chef-omnibus.sh",
-        "../scripts/puppet.sh",
         "../scripts/add-network-interface-detection.sh"
       ],
       "type": "shell"

@@ -23,8 +23,6 @@ Veewee::Definition.declare({
     "vagrant.sh",             # Vagrant config (vagrant user, keys)
     "vmware.sh",              # VMware config
     "xcode-cli-tools.sh",     # Xcode CLI tools
-    "chef-omnibus.sh",        # Chef Omnibus install
-    "puppet.sh",               # Puppet install from Hashicorp's puppet-boostrap repo
   ],
   :postinstall_timeout => "10000"
 })
