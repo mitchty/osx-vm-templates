@@ -27,13 +27,23 @@
 usage() {
 	cat <<EOF
 Usage:
-$(basename "$0") "/path/to/InstallESD.dmg" /path/to/output/directory
-$(basename "$0") "/path/to/Install OS X [Mountain] Lion.app" /path/to/output/directory
+$(basename "$0") [-upi] "/path/to/InstallESD.dmg" /path/to/output/directory
+$(basename "$0") [-upi] "/path/to/Install OS X [Name].app" /path/to/output/directory
 
 Description:
-Converts a 10.7/10.8/10.9 installer image to a new image that contains components
+Converts an OS X installer to a new image that contains components
 used to perform an automated installation. The new image will be named
 'OSX_InstallESD_[osversion].dmg.'
+
+Optional switches:
+  -u <user>
+    Sets the username of the root user, defaults to 'vagrant'.
+
+  -p <password>
+    Sets the password of the root user, defaults to 'vagrant'.
+
+  -i <path to image>
+    Sets the path of the avatar image for the root user, defaulting to the vagrant icon.
 
 EOF
 }
@@ -45,15 +55,48 @@ msg_error() {
 	echo "\033[0;31m-- $1\033[0m"
 }
 
+render_template() {
+  eval "echo \"$(cat "$1")\""
+}
+
 if [ $# -eq 0 ]; then
 	usage
 	exit 1
 fi
 
+SCRIPT_DIR="$(cd "$(dirname "$0")"; pwd)"
+SUPPORT_DIR="$SCRIPT_DIR/support"
+
+# Parse the optional command line switches
+USER="vagrant"
+PASSWORD="vagrant"
+IMAGE_PATH="$SUPPORT_DIR/vagrant.jpg"
+
+while getopts u:p:i: OPT; do
+  case "$OPT" in
+    u)
+      USER="$OPTARG"
+      ;;
+    p)
+      PASSWORD="$OPTARG"
+      ;;
+    i)
+      IMAGE_PATH="$OPTARG"
+      ;;
+    \?)
+      usage
+      exit 1
+      ;;
+  esac
+done
+
+# Remove the switches we parsed above.
+shift $(expr $OPTIND - 1)
+
 if [ $(id -u) -ne 0 ]; then
 	msg_error "This script must be run as root, as it saves a disk image with ownerships enabled."
 	exit 1
-fi	
+fi
 
 ESD="$1"
 if [ ! -e "$ESD" ]; then
@@ -70,13 +113,12 @@ if [ -d "$ESD" ]; then
 	fi
 fi
 
-SCRIPT_DIR="$(cd $(dirname "$0"); pwd)"
 VEEWEE_DIR="$(cd "$SCRIPT_DIR/../../../"; pwd)"
 VEEWEE_UID=$(stat -f %u "$VEEWEE_DIR")
 VEEWEE_GID=$(stat -f %g "$VEEWEE_DIR")
-DEFINITION_DIR="$(cd $SCRIPT_DIR/..; pwd)"
+DEFINITION_DIR="$(cd "$SCRIPT_DIR/.."; pwd)"
 
-if [ "$2" == "" ]; then
+if [ "$2" = "" ]; then
     msg_error "Currently an explicit output directory is required as the second argument."
 	exit 1
 	# The rest is left over from the old prepare_veewee_iso.sh script. Not sure if we
@@ -89,7 +131,7 @@ if [ "$2" == "" ]; then
 		mkdir "../../../iso"
 		chown $VEEWEE_UID:$VEEWEE_GID "../../../iso"
 	fi
-	OUT_DIR="$(cd $SCRIPT_DIR; cd ../../../iso; pwd)"
+	OUT_DIR="$(cd "$SCRIPT_DIR"; cd ../../../iso; pwd)"
 	cd "$OLDPWD" # Rest of script depends on being in the working directory if we were passed relative paths
 else
 	OUT_DIR="$2"
@@ -140,26 +182,23 @@ if [ -e "$OUTPUT_DMG" ]; then
 	exit 1
 fi
 
-SUPPORT_DIR="$SCRIPT_DIR/support"
-
-# Build our post-installation pkg that will create a vagrant user and enable ssh
+# Build our post-installation pkg that will create a user and enable ssh
 msg_status "Making firstboot installer pkg.."
 
 # payload items
 mkdir -p "$SUPPORT_DIR/pkgroot/private/var/db/dslocal/nodes/Default/users"
 mkdir -p "$SUPPORT_DIR/pkgroot/private/var/db/shadow/hash"
-cp "$SUPPORT_DIR/vagrant.plist" "$SUPPORT_DIR/pkgroot/private/var/db/dslocal/nodes/Default/users/vagrant.plist"
-VAGRANT_GUID=$(/usr/libexec/PlistBuddy -c 'Print :generateduid:0' "$SUPPORT_DIR/vagrant.plist")
-cp "$SUPPORT_DIR/shadowhash" "$SUPPORT_DIR/pkgroot/private/var/db/shadow/hash/$VAGRANT_GUID"
+BASE64_IMAGE=$(openssl base64 -in "$IMAGE_PATH")
+# Replace USER and BASE64_IMAGE in the user.plist file with the actual user and image
+render_template "$SUPPORT_DIR/user.plist" > "$SUPPORT_DIR/pkgroot/private/var/db/dslocal/nodes/Default/users/$USER.plist"
+USER_GUID=$(/usr/libexec/PlistBuddy -c 'Print :generateduid:0' "$SUPPORT_DIR/user.plist")
+# Generate a shadowhash from the supplied password
+"$SUPPORT_DIR/generate_shadowhash" "$PASSWORD" > "$SUPPORT_DIR/pkgroot/private/var/db/shadow/hash/$USER_GUID"
 
 # postinstall script
 mkdir -p "$SUPPORT_DIR/tmp/Scripts"
-cp "$SUPPORT_DIR/pkg-postinstall" "$SUPPORT_DIR/tmp/Scripts/postinstall"
-# executability should be copied over, warn if we had to chmod again
-if [ ! -x "$SUPPORT_DIR/tmp/Scripts/postinstall" ]; then
-	msg_status "'postinstall' script was for some reason not executable. Setting it again now, but it should have been already set when copying the definition."
-	chmod a+x "$SUPPORT_DIR/tmp/Scripts/postinstall"
-fi
+cat "$SUPPORT_DIR/pkg-postinstall" | sed -e "s/__USER__PLACEHOLDER__/${USER}/" > "$SUPPORT_DIR/tmp/Scripts/postinstall"
+chmod a+x "$SUPPORT_DIR/tmp/Scripts/postinstall"
 
 # build it
 BUILT_COMPONENT_PKG="$SUPPORT_DIR/tmp/veewee-config-component.pkg"
@@ -186,7 +225,7 @@ hdiutil convert -format UDRW -o "$BASE_SYSTEM_DMG_RW" "$BASE_SYSTEM_DMG"
 
 if [ $DMG_OS_VERS_MAJOR -ge 9 ]; then
 	msg_status "Growing new BaseSystem.."
-	hdiutil resize -size 6G "$BASE_SYSTEM_DMG_RW"
+	hdiutil resize -size 7G "$BASE_SYSTEM_DMG_RW"
 fi
 
 msg_status "Mounting new BaseSystem.."
@@ -196,6 +235,13 @@ if [ $DMG_OS_VERS_MAJOR -ge 9 ]; then
 	msg_status "Moving 'Packages' directory from the ESD to BaseSystem.."
 	mv -v "$MNT_ESD/Packages" "$MNT_BASE_SYSTEM/System/Installation/"
 	PACKAGES_DIR="$MNT_BASE_SYSTEM/System/Installation/Packages"
+
+	# This isn't strictly required for Mavericks, but Yosemite will consider the
+	# installer corrupt if this isn't included, because it cannot verify BaseSystem's
+	# consistency and perform a recovery partition verification
+	msg_status "Copying in original BaseSystem dmg and chunklist.."
+	cp "$MNT_ESD/BaseSystem.dmg" "$MNT_BASE_SYSTEM/"
+	cp "$MNT_ESD/BaseSystem.chunklist" "$MNT_BASE_SYSTEM/"
 else
 	PACKAGES_DIR="$MNT_ESD/Packages"
 fi
@@ -223,7 +269,7 @@ msg_status "Unmounting ESD.."
 hdiutil detach "$MNT_ESD"
 
 if [ $DMG_OS_VERS_MAJOR -ge 9 ]; then
-	msg_status "On Mavericks the entire modified BaseSystem is our output dmg."
+	msg_status "On Mavericks and later, the entire modified BaseSystem is our output dmg."
 	hdiutil convert -format UDZO -o "$OUTPUT_DMG" "$BASE_SYSTEM_DMG_RW"
 else
 	msg_status "Pre-Mavericks we're modifying the original ESD file."
@@ -239,7 +285,7 @@ fi
 
 if [ -n "$DEFAULT_ISO_DIR" ]; then
 	DEFINITION_FILE="$DEFINITION_DIR/definition.rb"
-	msg_status "Setting ISO file in definition "$DEFINITION_FILE".."
+	msg_status "Setting ISO file in definition $DEFINITION_FILE.."
 	ISO_FILE=$(basename "$OUTPUT_DMG")
 	# Explicitly use -e in order to use double quotes around sed command
 	sed -i -e "s/%OSX_ISO%/${ISO_FILE}/" "$DEFINITION_FILE"
