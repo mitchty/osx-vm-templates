@@ -58,7 +58,7 @@
     },
     {
       "boot_wait": "2s",
-      "disk_size": 20480,
+      "disk_size": 40960,
       "guest_additions_mode": "disable",
       "guest_os_type": "MacOS109_64",
       "hard_drive_interface": "sata",
@@ -102,30 +102,42 @@
       "scripts": [
         "../scripts/vagrant.sh",
         "../scripts/vmware.sh",
+        "../scripts/parallels.sh",
         "../scripts/xcode-cli-tools.sh",
-        "../scripts/xcode.sh",
         "../scripts/add-network-interface-detection.sh",
         "../scripts/autologin.sh",
         "../scripts/system-update.sh",
-        "../scripts/zerofreespace.sh"
+        "../scripts/xcode.sh",
+        "../scripts/shrink.sh"
+      ],
+      "scripts": [
+        "../scripts/packerhack.sh"
       ],
       "environment_vars": [
-        "INSTALL_VAGRANT_KEYS={{user `install_vagrant_keys`}}",
-        "USERNAME={{user `username`}}",
-        "PASSWORD={{user `password`}}",
         "AUTOLOGIN={{user `autologin`}}",
-        "UPDATE_SYSTEM={{user `update_system`}}"
+        "CHEF_VERSION={{user `chef_version`}}",
+        "FACTER_VERSION={{user `facter_version`}}",
+        "HIERA_VERSION={{user `hiera_version`}}",
+        "INSTALL_VAGRANT_KEYS={{user `install_vagrant_keys`}}",
+        "PASSWORD={{user `password`}}",
+        "PUPPET_VERSION={{user `puppet_version`}}",
+        "UPDATE_SYSTEM={{user `update_system`}}",
+        "USERNAME={{user `username`}}"
       ],
       "type": "shell"
     }
   ],
   "variables": {
-    "iso_checksum": "e48b4669879c99896140769e6471281a",
-    "iso_url": "/Users/mitch/Vagrant/OSX_InstallESD_10.10.3_14D131.dmg",
-    "username": "vagrant",
-    "password": "vagrant",
-    "autologin": true,
+    "autologin": false,
+    "chef_version": "latest",
+    "facter_version": "latest",
+    "hiera_version": "latest",
     "install_vagrant_keys": true,
-    "update_system": true
+    "iso_checksum": "aff67f81dfbad7afda56c423473d61a6",
+    "iso_url": "OSX_InstallESD_10.9.3_13D65.dmg",
+    "password": "vagrant",
+    "puppet_version": "latest",
+    "update_system": true,
+    "username": "vagrant"
   }
 }
