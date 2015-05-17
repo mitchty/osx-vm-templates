@@ -108,9 +108,7 @@
         "../scripts/autologin.sh",
         "../scripts/system-update.sh",
         "../scripts/xcode.sh",
-        "../scripts/shrink.sh"
-      ],
-      "scripts": [
+        "../scripts/shrink.sh",
         "../scripts/packerhack.sh"
       ],
       "environment_vars": [
